@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Connection Test</title>
+    <style>
+        body { font-family: Arial; padding: 20px; background: #1a1a2e; color: #eee; }
+        .result { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background: #2ecc71; color: white; }
+        .error { background: #e74c3c; color: white; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>Backend API Connection Test</h1>
+    
+    <button onclick="testHealth()">Test Health Endpoint</button>
+    <button onclick="testLogin()">Test Login</button>
+    
+    <div id="results"></div>
+    
+    <script>
+        const API_URL = 'http://localhost:8000';
+        const resultsDiv = document.getElementById('results');
+        
+        function addResult(message, isSuccess) {
+            const div = document.createElement('div');
+            div.className = 'result ' + (isSuccess ? 'success' : 'error');
+            div.textContent = message;
+            resultsDiv.insertBefore(div, resultsDiv.firstChild);
+        }
+        
+        async function testHealth() {
+            try {
+                const response = await fetch(`${API_URL}/health`);
+                const data = await response.json();
+                addResult(`✅ Health check passed: ${JSON.stringify(data)}`, true);
+            } catch (error) {
+                addResult(`❌ Health check failed: ${error.message}`, false);
+            }
+        }
+        
+        async function testLogin() {
+            try {
+                const response = await fetch(`${API_URL}/api/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email: 'testuser2@example.com',
+                        password: 'password123'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    addResult(`✅ Login successful! Token: ${data.access_token.substring(0, 30)}...`, true);
+                } else {
+                    addResult(`❌ Login failed: ${data.detail}`, false);
+                }
+            } catch (error) {
+                addResult(`❌ Login request failed: ${error.message}`, false);
+            }
+        }
+    </script>
+</body>
+</html>

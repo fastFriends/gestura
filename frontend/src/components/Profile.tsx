@@ -1,20 +1,34 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Camera, Mail, Phone, MapPin, Calendar, Shield, Bell, Languages, Edit2, Save, X, Moon, Sun } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 
 export default function Profile() {
   const { isDarkMode, setTheme } = useTheme();
+  const { user } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
-    name: 'John Doe',
-    email: 'john.doe@example.com',
+    username: user?.username || '',
+    email: user?.email || '',
     phone: '+1 (555) 123-4567',
     location: 'San Francisco, CA',
-    joinDate: 'January 2024',
+    joinDate: user?.created_at ? new Date(user.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : '',
     preferredLanguage: 'ASL (American Sign Language)',
   });
+
+  // Update form data when user data loads
+  useEffect(() => {
+    if (user) {
+      setFormData(prev => ({
+        ...prev,
+        username: user.username,
+        email: user.email,
+        joinDate: new Date(user.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+      }));
+    }
+  }, [user]);
 
   const handleSave = () => {
     setIsEditing(false);
@@ -59,13 +73,15 @@ export default function Profile() {
                 <div className="text-center">
                   <div className="relative inline-block mb-4">
                     <div className="w-24 h-24 md:w-32 md:h-32 bg-gradient-to-br from-blue-600 to-blue-500 rounded-full flex items-center justify-center text-white shadow-lg">
-                      <span className="text-3xl md:text-4xl font-semibold">JD</span>
+                      <span className="text-3xl md:text-4xl font-semibold">
+                        {formData.username ? formData.username.substring(0, 2).toUpperCase() : 'U'}
+                      </span>
                     </div>
                     <button className="absolute bottom-0 right-0 p-2 bg-white dark:bg-gray-800 rounded-full shadow-lg border-2 border-gray-100 dark:border-gray-700 hover:scale-110 transition-transform">
                       <Camera className="w-4 h-4 text-gray-600 dark:text-gray-400" />
                     </button>
                   </div>
-                  <h3 className="text-gray-900 dark:text-white mb-1">{formData.name}</h3>
+                  <h3 className="text-gray-900 dark:text-white mb-1">{formData.username}</h3>
                   <p className="text-sm text-gray-600 dark:text-gray-400">{formData.email}</p>
                 </div>
 
@@ -160,16 +176,16 @@ export default function Profile() {
 
                 <div className="grid md:grid-cols-2 gap-4 md:gap-6">
                   <div>
-                    <label className="block text-sm text-gray-700 dark:text-gray-300 mb-2">Full Name</label>
+                    <label className="block text-sm text-gray-700 dark:text-gray-300 mb-2">Username</label>
                     {isEditing ? (
                       <input
                         type="text"
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        value={formData.username}
+                        onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                         className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     ) : (
-                      <p className="px-4 py-2.5 bg-gray-50 dark:bg-gray-800 rounded-lg text-gray-900 dark:text-white">{formData.name}</p>
+                      <p className="px-4 py-2.5 bg-gray-50 dark:bg-gray-800 rounded-lg text-gray-900 dark:text-white">{formData.username}</p>
                     )}
                   </div>
 

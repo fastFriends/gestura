@@ -3,30 +3,33 @@ import { useNavigate } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, User, ArrowRight, Languages } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function Signup() {
   const navigate = useNavigate();
+  const { signup } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
-    name: '',
+    username: '',
     email: '',
     password: '',
     confirmPassword: '',
   });
   const [errors, setErrors] = useState({
-    name: '',
+    username: '',
     email: '',
     password: '',
     confirmPassword: '',
   });
 
   const validateForm = () => {
-    const newErrors = { name: '', email: '', password: '', confirmPassword: '' };
+    const newErrors = { username: '', email: '', password: '', confirmPassword: '' };
     let isValid = true;
 
-    if (!formData.name) {
-      newErrors.name = 'Name is required';
+    if (!formData.username) {
+      newErrors.username = 'Username is required';
       isValid = false;
     }
 
@@ -58,11 +61,19 @@ export default function Signup() {
     return isValid;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (validateForm()) {
-      // Here you would typically call your registration API
-      navigate('/home');
+      setIsLoading(true);
+      try {
+        await signup(formData.email, formData.username, formData.password);
+        navigate('/home');
+      } catch (error) {
+        // Error is handled in the signup function with toast
+        console.error('Signup error:', error);
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -144,10 +155,10 @@ export default function Signup() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Name */}
+            {/* Username */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Full Name
+                Username
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -155,15 +166,15 @@ export default function Signup() {
                 </div>
                 <input
                   type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  value={formData.username}
+                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                   className={`w-full pl-10 pr-4 py-3 border ${
-                    errors.name ? 'border-red-500' : 'border-gray-300 dark:border-gray-700'
+                    errors.username ? 'border-red-500' : 'border-gray-300 dark:border-gray-700'
                   } rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors`}
-                  placeholder="John Doe"
+                  placeholder="johndoe"
                 />
               </div>
-              {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name}</p>}
+              {errors.username && <p className="mt-1 text-xs text-red-500">{errors.username}</p>}
             </div>
 
             {/* Email */}
@@ -268,10 +279,11 @@ export default function Signup() {
             {/* Submit Button */}
             <Button
               type="submit"
-              className="w-full bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white py-3 rounded-lg font-medium shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2"
+              disabled={isLoading}
+              className="w-full bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white py-3 rounded-lg font-medium shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Create Account
-              <ArrowRight className="w-5 h-5" />
+              {isLoading ? 'Creating Account...' : 'Create Account'}
+              {!isLoading && <ArrowRight className="w-5 h-5" />}
             </Button>
 
             {/* Divider */}
@@ -291,7 +303,7 @@ export default function Signup() {
               <Button
                 type="button"
                 variant="outline"
-                className="w-full py-3 border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+                className="w-full py-3 text-gray-900 dark:text-white border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600"
               >
                 <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
                   <path
@@ -316,7 +328,7 @@ export default function Signup() {
               <Button
                 type="button"
                 variant="outline"
-                className="w-full py-3 border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+                className="w-full py-3 text-gray-900 dark:text-white border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600"
               >
                 <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10z" />
