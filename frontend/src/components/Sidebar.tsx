@@ -11,8 +11,8 @@ export default function Sidebar() {
   ];
 
   return (
-    <aside className="h-screen overflow-hidden bg-gray-50 dark:bg-gray-950 p-4">
-      <div className="w-20 h-[calc(100vh-2rem)]    bg-white dark:bg-gray-900 rounded-xl flex flex-col justify-between p-3 pt-7 shadow-[0_1px_2px_0_rgba(60,64,67,0.3),0_2px_6px_2px_rgba(60,64,67,0.15)] dark:shadow-[0_1px_3px_0_rgba(0,0,0,0.3),0_4px_8px_3px_rgba(0,0,0,0.15)] dark:border dark:border-gray-800">
+    <aside className="h-screen overflow-hidden bg-gray-50 dark:bg-gray-950 p-4 pr-0">
+      <div className="w-20 h-[calc(100vh-2rem)] bg-white dark:bg-gray-900 rounded-xl flex flex-col justify-between p-3 pt-7 shadow-[0_1px_2px_0_rgba(60,64,67,0.3),0_2px_6px_2px_rgba(60,64,67,0.15)] dark:shadow-[0_1px_3px_0_rgba(0,0,0,0.3),0_4px_8px_3px_rgba(0,0,0,0.15)] dark:border dark:border-gray-800">
 
         {/* Company Logo */}
         <Link

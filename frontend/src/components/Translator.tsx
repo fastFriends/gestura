@@ -30,6 +30,7 @@ export default function Translator() {
   const [copied, setCopied] = useState(false);
   const [isConnected, setIsConnected] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
+ 
 
   const meetingId = '123-456-789';
 
@@ -66,6 +67,8 @@ export default function Translator() {
     { id: 4, name: 'Mike Wilson', isPresenting: false, isMuted: false, isVideoOn: false },
   ];
 
+  const presenter = participants.find(p => p.isPresenting);
+
   const chatMessages = [
     { id: 1, sender: 'John Smith', message: 'Can you slow down a bit?', time: '2:34 PM' },
     { id: 2, sender: 'You', message: 'Sure, no problem!', time: '2:35 PM' },
@@ -83,7 +86,6 @@ export default function Translator() {
             <div className="flex-1 flex gap-3 min-h-0 overflow-hidden">
             {/* Presenter Video - Center */}
             {(() => {
-              const presenter = participants.find(p => p.isPresenting);
               return presenter ? (
                 <div className="flex-1 flex flex-col gap-3 min-h-0">
                   <Card className="flex-1 bg-black dark:bg-gray-950 rounded-xl overflow-hidden relative border-gray-200 dark:border-gray-800 shadow-lg">
@@ -93,7 +95,7 @@ export default function Translator() {
                         autoPlay
                         playsInline
                         muted
-                        className="w-full h-full object-cover"
+                        className="block w-full h-full object-cover"
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center bg-gray-800 dark:bg-gray-900">
@@ -139,16 +141,16 @@ export default function Translator() {
             })()}
 
             {/* Participants Sidebar - Right */}
-            <div className="w-60 lg:w-72 flex flex-col gap-2 overflow-y-auto">
+              <div className="w-60 lg:w-72 flex flex-col gap-2 overflow-y-auto">
               {participants.filter(p => !p.isPresenting).slice(0, 3).map((participant) => (
                 <Card key={participant.id} className="bg-gray-800 dark:bg-gray-900 rounded-lg overflow-hidden relative aspect-video border-gray-200 dark:border-gray-800 shadow hover:ring-2 hover:ring-blue-500 dark:hover:ring-blue-400 transition-all flex-shrink-0">
-                  {participant.id === 1 && isVideoOn ? (
+                  {participant.id === 1 && isVideoOn && (!presenter || presenter.id !== participant.id) ? (
+                    // Only attach the video element here if the presenter is NOT the same participant
                     <video
-                      ref={videoRef}
                       autoPlay
                       playsInline
                       muted
-                      className="w-full h-full object-cover"
+                      className="block w-full h-full object-cover"
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center bg-gray-800 dark:bg-gray-900">
