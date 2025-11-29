@@ -26,11 +26,12 @@ const Underworks: React.FC = () => {
                   finished view.
                 </p>
 
-                <div className="mt-4 flex flex-wrap gap-3 justify-center">
-                  <Button variant="outline" onClick={() => navigate('/home')}>Go Home</Button>
+                <div className="mt-4 flex flex-wrap gap-3 justify-center text-gray-900 dark:text-white">
+                  <Button variant="outline" onClick={() => navigate('/home')} className="hover:text-gray-700 hover:dark:text-gray-400" >Go Home</Button>
                   <Button
                     variant="default"
                     onClick={() => alert("Thanks — we'll notify you when this page is ready.")}
+                    className="hover:text-gray-700 hover:dark:text-gray-400"
                   >
                     Notify Me
                   </Button>
