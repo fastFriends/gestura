@@ -8,6 +8,7 @@ import Profile from './components/Profile';
 import Login from './components/Login';
 import Signup from './components/Signup';
 import Sidebar from './components/Sidebar';
+import Underworks from './components/Underworks';
 
 export default function App() {
   const Layout = () => (
@@ -26,6 +27,7 @@ export default function App() {
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+          <Route path="/underworks" element={<Underworks />} />
           <Route element={<Layout />}>
             <Route path="/home" element={<Home />} />
             <Route path="/personal" element={<Personal />} />
