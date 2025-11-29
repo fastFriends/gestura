@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
-import { 
-  Video, 
-  VideoOff, 
-  Mic, 
-  MicOff, 
+import {
+  Video,
+  VideoOff,
+  Mic,
+  MicOff,
   PhoneOff,
   MessageSquare,
   Users,
@@ -30,7 +30,7 @@ export default function Translator() {
   const [copied, setCopied] = useState(false);
   const [isConnected, setIsConnected] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
- 
+
 
   const meetingId = '123-456-789';
 
@@ -65,9 +65,12 @@ export default function Translator() {
     { id: 2, name: 'John Smith', isPresenting: false, isMuted: true, isVideoOn: false },
     { id: 3, name: 'Sarah Johnson', isPresenting: false, isMuted: false, isVideoOn: false },
     { id: 4, name: 'Mike Wilson', isPresenting: false, isMuted: false, isVideoOn: false },
+    { id: 5, name: 'M Wilson', isPresenting: false, isMuted: false, isVideoOn: false },
+    { id: 6, name: 'M Wilson', isPresenting: false, isMuted: false, isVideoOn: false },
   ];
 
   const presenter = participants.find(p => p.isPresenting);
+  const others = participants.filter(p => !p.isPresenting);
 
   const chatMessages = [
     { id: 1, sender: 'John Smith', message: 'Can you slow down a bit?', time: '2:34 PM' },
@@ -77,18 +80,25 @@ export default function Translator() {
 
   return (
     <div className="h-screen bg-gray-50 dark:bg-gray-950 transition-colors overflow-hidden">
-      
+
       <main className="h-full flex flex-col">
         <div className="flex-1 flex flex-col lg:flex-row gap-3 p-3 md:p-4 overflow-hidden">
           {/* Left Side - Video Content */}
-          <div className="flex-1 flex flex-col gap-3 min-h-0 overflow-hidden">
+          <div className="flex-1 flex flex-col gap-3 min-h-0 overflow-auto">
             {/* Main Video Area */}
-            <div className="flex-1 flex gap-3 min-h-0 overflow-hidden">
-            {/* Presenter Video - Center */}
-            {(() => {
-              return presenter ? (
-                <div className="flex-1 flex flex-col gap-3 min-h-0">
-                  <Card className="flex-1 bg-black dark:bg-gray-950 rounded-xl overflow-hidden relative border-gray-200 dark:border-gray-800 shadow-lg">
+            <div className="flex-1 min-h-0">
+              <div className="grid gap-3 min-h-0 w-full h-full"
+                style={{
+                  gridTemplateColumns: presenter ? "2fr 1fr" : "repeat(2, 1fr)",
+                  gridTemplateRows: presenter ? "1fr" : `repeat(${participants.length}, minmax(200px, 1fr))`
+                }}
+              >
+
+                {/* PRESENTER TILE */}
+                {presenter && (
+                  <Card className="w-full h-full bg-black dark:bg-gray-950 rounded-xl overflow-hidden relative border-gray-200 dark:border-gray-800 shadow-lg flex items-center justify-center">
+
+                    {/* If presenter is YOU and your camera is on */}
                     {presenter.id === 1 && isVideoOn ? (
                       <video
                         ref={videoRef}
@@ -97,13 +107,20 @@ export default function Translator() {
                         muted
                         className="block w-full h-full object-cover"
                       />
+                    ) : presenter.isVideoOn ? (
+                      <video
+                        autoPlay
+                        playsInline
+                        muted
+                        className="block w-full h-full object-cover"
+                      />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center bg-gray-800 dark:bg-gray-900">
                         <div className="text-center">
-                          <div className="w-20 h-20 md:w-24 md:h-24 bg-gradient-to-br from-blue-600 to-blue-500 rounded-full mx-auto mb-3 flex items-center justify-center">
-                            <span className="text-white font-semibold text-2xl md:text-3xl">{presenter.name[0]}</span>
+                          <div className="w-20 h-20 bg-gradient-to-br from-blue-600 to-blue-500 rounded-full mx-auto mb-3 flex items-center justify-center">
+                            <span className="text-white font-semibold text-2xl">{presenter.name[0]}</span>
                           </div>
-                          <p className="text-lg text-gray-300 dark:text-gray-400">{presenter.name}</p>
+                          <p className="text-lg text-gray-300">{presenter.name}</p>
                           {!presenter.isVideoOn && (
                             <p className="text-sm text-gray-500 mt-2">Camera is off</p>
                           )}
@@ -115,7 +132,7 @@ export default function Translator() {
                     <div className="absolute bottom-4 left-4 bg-black/70 text-white px-3 py-2 rounded-lg backdrop-blur-sm">
                       <div className="flex items-center gap-2">
                         <span className="font-medium">{presenter.name}</span>
-                        <Monitor className="w-4 h-4 text-blue-400" />
+                        <span className="text-blue-400 text-xs">Presenting</span>
                         {presenter.isMuted ? (
                           <div className="bg-red-600 rounded-full p-1">
                             <MicOff className="w-3 h-3 text-white" />
@@ -128,78 +145,65 @@ export default function Translator() {
                       </div>
                     </div>
 
-                    <Button 
-                      variant="secondary" 
-                      size="icon" 
-                      className="absolute top-4 right-4 h-10 w-10 rounded-full bg-gray-900/80 hover:bg-gray-800/80 border-0"
-                    >
-                      <Maximize2 className="w-4 h-4 text-white" />
-                    </Button>
                   </Card>
-                </div>
-              ) : null;
-            })()}
+                )}
 
-            {/* Participants Sidebar - Right */}
-              <div className="w-60 lg:w-72 flex flex-col gap-2 overflow-y-auto">
-              {participants.filter(p => !p.isPresenting).slice(0, 3).map((participant) => (
-                <Card key={participant.id} className="bg-gray-800 dark:bg-gray-900 rounded-lg overflow-hidden relative aspect-video border-gray-200 dark:border-gray-800 shadow hover:ring-2 hover:ring-blue-500 dark:hover:ring-blue-400 transition-all flex-shrink-0">
-                  {participant.id === 1 && isVideoOn && (!presenter || presenter.id !== participant.id) ? (
-                    // Only attach the video element here if the presenter is NOT the same participant
-                    <video
-                      autoPlay
-                      playsInline
-                      muted
-                      className="block w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-gray-800 dark:bg-gray-900">
-                      <div className="text-center">
-                        <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-500 rounded-full mx-auto mb-1.5 flex items-center justify-center">
-                          <span className="text-white font-semibold text-sm">{participant.name[0]}</span>
+                {/* OTHER PARTICIPANTS LIST */}
+                <div
+                  className="grid gap-3 overflow-auto min-w-[200px]"
+                  style={{
+                    gridTemplateRows: `repeat(${others.length > 3 ? 3 : others.length}, minmax(120px, 1fr))`
+                  }}
+                >
+                  {others.slice(0, 2).map((p) => (
+                    <Card
+                      key={p.id}
+                      className="bg-gray-800 dark:bg-gray-900 rounded-lg overflow-hidden relative border-gray-200 dark:border-gray-800 shadow flex items-center justify-center"
+                    >
+                      {/* Video Logic */}
+                      {p.id === 1 && isVideoOn && presenter?.id !== 1 ? (
+                        <video autoPlay playsInline muted className="w-full h-full object-cover" />
+                      ) : p.isVideoOn ? (
+                        <video autoPlay playsInline muted className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="flex flex-col items-center justify-center w-full h-full">
+                          <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-500 rounded-full flex items-center justify-center mb-2">
+                            <span className="text-white font-medium">{p.name[0]}</span>
+                          </div>
+                          <p className="text-xs text-gray-300 truncate px-2">{p.name}</p>
                         </div>
-                        <p className="text-xs text-gray-300 dark:text-gray-400 px-2 truncate">{participant.name}</p>
-                      </div>
-                    </div>
-                  )}
+                      )}
 
-                  {/* Participant Info Bar */}
-                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/60 to-transparent p-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-white text-xs font-medium truncate flex-1">{participant.name}</span>
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        {participant.isMuted ? (
-                          <div className="bg-red-600 rounded-full p-0.5">
-                            <MicOff className="w-2.5 h-2.5 text-white" />
-                          </div>
+                      {/* Participant Info */}
+                      <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-2 py-1 flex justify-between items-center">
+                        <span className="text-white text-xs truncate">{p.name}</span>
+
+                        {p.isMuted ? (
+                          <MicOff className="w-3 h-3 text-red-400" />
                         ) : (
-                          <div className="bg-gray-700/80 rounded-full p-0.5">
-                            <Mic className="w-2.5 h-2.5 text-white" />
-                          </div>
+                          <Mic className="w-3 h-3 text-green-400" />
                         )}
                       </div>
-                    </div>
-                  </div>
-                </Card>
-              ))}
+                    </Card>
+                  ))}
 
-              {/* More Participants Indicator */}
-              {participants.filter(p => !p.isPresenting).length > 3 && (
-                <Card className="bg-gray-800 dark:bg-gray-900 rounded-lg overflow-hidden relative aspect-video border-gray-200 dark:border-gray-800 shadow hover:bg-gray-700 dark:hover:bg-gray-800 transition-all cursor-pointer flex-shrink-0">
-                  <div className="w-full h-full flex items-center justify-center">
-                    <div className="text-center">
-                      <div className="w-12 h-12 bg-gradient-to-br from-gray-700 to-gray-600 rounded-full mx-auto mb-1.5 flex items-center justify-center">
-                        <Users className="w-6 h-6 text-white" />
+                  {/* "+N more" CARD */}
+                  {others.length > 2 && (
+                    <Card className="bg-gray-800 dark:bg-gray-900 rounded-lg overflow-hidden border-gray-200 dark:border-gray-800 shadow flex items-center justify-center">
+                      <div className="flex flex-col items-center justify-center w-full h-full">
+                        <div className="w-12 h-12 bg-gray-700 rounded-full flex items-center justify-center mb-2">
+                          <span className="text-white font-medium text-sm">+{others.length - 2}</span>
+                        </div>
+                        <p className="text-xs text-gray-300">more</p>
                       </div>
-                      <p className="text-sm font-medium text-white">
-                        +{participants.filter(p => !p.isPresenting).length - 3} more
-                      </p>
-                    </div>
-                  </div>
-                </Card>
-              )}
+                    </Card>
+                  )}
+                </div>
+
+
+              </div>
             </div>
-            </div>
+
 
             {/* Live Translation Bar */}
             <div className="bg-white dark:bg-gray-900 rounded-xl px-4 md:px-5 py-2.5 md:py-3 shadow-lg border border-gray-200 dark:border-gray-800 flex-shrink-0">
@@ -252,11 +256,10 @@ export default function Translator() {
               <div className="flex items-center justify-center gap-2 order-1 sm:order-2">
                 <Button
                   size="icon"
-                  className={`h-9 w-9 md:h-10 md:w-10 rounded-full transition-all ${
-                    isAudioOn 
-                      ? 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200' 
-                      : 'bg-red-600 hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600 text-white'
-                  }`}
+                  className={`h-9 w-9 md:h-10 md:w-10 rounded-full transition-all ${isAudioOn
+                    ? 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200'
+                    : 'bg-red-600 hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600 text-white'
+                    }`}
                   onClick={() => setIsAudioOn(!isAudioOn)}
                 >
                   {isAudioOn ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
@@ -264,11 +267,10 @@ export default function Translator() {
 
                 <Button
                   size="icon"
-                  className={`h-9 w-9 md:h-10 md:w-10 rounded-full transition-all ${
-                    isVideoOn 
-                      ? 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200' 
-                      : 'bg-red-600 hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600 text-white'
-                  }`}
+                  className={`h-9 w-9 md:h-10 md:w-10 rounded-full transition-all ${isVideoOn
+                    ? 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200'
+                    : 'bg-red-600 hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600 text-white'
+                    }`}
                   onClick={() => setIsVideoOn(!isVideoOn)}
                 >
                   {isVideoOn ? <Video className="w-4 h-4" /> : <VideoOff className="w-4 h-4" />}
@@ -306,11 +308,10 @@ export default function Translator() {
               {/* Right Side - Participants, Chat & More */}
               <div className="flex items-center justify-end gap-1.5 md:gap-2 order-3">
                 <Button
-                  className={`gap-1.5 h-8 md:h-9 text-xs md:text-sm px-2.5 md:px-3 ${
-                    showParticipants 
-                      ? 'bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white' 
-                      : 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200'
-                  }`}
+                  className={`gap-1.5 h-8 md:h-9 text-xs md:text-sm px-2.5 md:px-3 ${showParticipants
+                    ? 'bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white'
+                    : 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200'
+                    }`}
                   onClick={() => {
                     setShowParticipants(!showParticipants);
                     setShowChat(false);
@@ -321,11 +322,10 @@ export default function Translator() {
                 </Button>
                 <Button
                   size="icon"
-                  className={`h-8 w-8 md:h-9 md:w-9 ${
-                    showChat 
-                      ? 'bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white' 
-                      : 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200'
-                  }`}
+                  className={`h-8 w-8 md:h-9 md:w-9 ${showChat
+                    ? 'bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white'
+                    : 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200'
+                    }`}
                   onClick={() => {
                     setShowChat(!showChat);
                     setShowParticipants(false);
@@ -357,8 +357,8 @@ export default function Translator() {
               <Tabs defaultValue={showChat ? "chat" : "participants"} className="flex-1 flex flex-col">
                 <div className="border-b border-gray-200 dark:border-gray-800 px-4 pt-4">
                   <TabsList className="w-full grid grid-cols-2 bg-gray-100 dark:bg-gray-800">
-                    <TabsTrigger 
-                      value="participants" 
+                    <TabsTrigger
+                      value="participants"
                       className="flex items-center gap-2 data-[state=active]:bg-white dark:data-[state=active]:bg-gray-900"
                       onClick={() => {
                         setShowParticipants(true);
@@ -369,8 +369,8 @@ export default function Translator() {
                       <span className="hidden sm:inline">Participants ({participants.length})</span>
                       <span className="sm:hidden">{participants.length}</span>
                     </TabsTrigger>
-                    <TabsTrigger 
-                      value="chat" 
+                    <TabsTrigger
+                      value="chat"
                       className="flex items-center gap-2 data-[state=active]:bg-white dark:data-[state=active]:bg-gray-900"
                       onClick={() => {
                         setShowChat(true);
