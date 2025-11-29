@@ -1,0 +1,69 @@
+# Node modules
+node_modules/
+
+# Vite / build output
+dist/
+build/
+.vite/
+out/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# Environment files (do not commit secrets)
+.env
+.env.*
+.env.local
+.env.*.local
+
+# Editor / IDE
+.vscode/
+.idea/
+*.iml
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+Icon?
+
+# TypeScript
+*.tsbuildinfo
+
+# Cache / local data
+.cache/
+.parcel-cache/
+.turbo/
+.pnp/
+.pnp.js
+
+# Coverage
+coverage/
+lcov-report/
+
+# Package artifacts
+*.tgz
+*.zip
+
+# Maps / bundles
+*.map
+
+# Misc
+*.bak
+*.tmp
+*.old
+*.stackdump
+
+# If you use Python/virtualenvs in this repo
+venv/
+.venv/
+env/
+
+# Certificates & keys
+*.pem
+*.key
+*.pfx
