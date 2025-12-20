@@ -15,7 +15,8 @@ import {
   Check,
   Languages,
   Settings,
-  Share2
+  Share2,
+  AlertCircle
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
@@ -29,26 +30,72 @@ export default function Translator() {
   const [showParticipants, setShowParticipants] = useState(false);
   const [copied, setCopied] = useState(false);
   const [isConnected, setIsConnected] = useState(true);
+  const [cameraError, setCameraError] = useState<string>('');
+  const [permissionDenied, setPermissionDenied] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
 
   const meetingId = '123-456-789';
 
   useEffect(() => {
     if (videoRef.current && isVideoOn) {
-      navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+      setCameraError('');
+      setPermissionDenied(false);
+      
+      navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          facingMode: 'user'
+        }, 
+        audio: false 
+      })
         .then(stream => {
+          streamRef.current = stream;
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
           }
+          setCameraError('');
+          setPermissionDenied(false);
         })
-        .catch(err => console.log('Error accessing camera:', err));
+        .catch(err => {
+          console.error('Error accessing camera:', err);
+          
+          // Handle different error types
+          if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+            setPermissionDenied(true);
+            setCameraError('Camera access denied. Please allow camera permissions in your browser settings.');
+            toast.error('Camera Permission Denied', {
+              description: 'Click the camera icon in your browser\'s address bar to allow access.',
+              duration: 5000,
+            });
+          } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+            setCameraError('No camera found. Please connect a camera and try again.');
+            toast.error('No Camera Found');
+          } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+            setCameraError('Camera is already in use by another application.');
+            toast.error('Camera In Use');
+          } else {
+            setCameraError('Failed to access camera: ' + err.message);
+            toast.error('Camera Error');
+          }
+          
+          // Turn off video if camera access fails
+          setIsVideoOn(false);
+        });
+    } else {
+      // Stop camera when video is turned off
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+      }
     }
 
     return () => {
-      if (videoRef.current && videoRef.current.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach(track => track.stop());
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
       }
     };
   }, [isVideoOn]);
@@ -116,13 +163,26 @@ export default function Translator() {
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center bg-gray-800 dark:bg-gray-900">
-                        <div className="text-center">
+                        <div className="text-center max-w-md px-4">
                           <div className="w-20 h-20 bg-gradient-to-br from-blue-600 to-blue-500 rounded-full mx-auto mb-3 flex items-center justify-center">
                             <span className="text-white font-semibold text-2xl">{presenter.name[0]}</span>
                           </div>
                           <p className="text-lg text-gray-300">{presenter.name}</p>
                           {!presenter.isVideoOn && (
                             <p className="text-sm text-gray-500 mt-2">Camera is off</p>
+                          )}
+                          {permissionDenied && presenter.id === 1 && (
+                            <div className="mt-4 p-3 bg-red-900/30 border border-red-800 rounded-lg">
+                              <div className="flex items-start gap-2 text-left">
+                                <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
+                                <div className="text-sm text-red-200">
+                                  <p className="font-medium mb-1">Camera Permission Required</p>
+                                  <p className="text-xs text-red-300">
+                                    Click the camera icon in your browser's address bar, then click "Allow" and refresh the page.
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
                           )}
                         </div>
                       </div>
@@ -272,6 +332,7 @@ export default function Translator() {
                     : 'bg-red-600 hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600 text-white'
                     }`}
                   onClick={() => setIsVideoOn(!isVideoOn)}
+                  title={permissionDenied ? 'Camera permission required' : isVideoOn ? 'Turn off camera' : 'Turn on camera'}
                 >
                   {isVideoOn ? <Video className="w-4 h-4" /> : <VideoOff className="w-4 h-4" />}
                 </Button>

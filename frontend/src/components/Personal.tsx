@@ -14,44 +14,213 @@ import {
   BarChart3,
   Download,
   Share2,
-  MoreVertical
+  MoreVertical,
+  AlertCircle
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
+import { translationAPI } from '../services/api';
+
+interface Translation {
+  time: string;
+  text: string;
+  confidence: number;
+}
 
 export default function Personal() {
   const [isVideoOn, setIsVideoOn] = useState(true);
   const [isAudioOn, setIsAudioOn] = useState(true);
   const [isTranslating, setIsTranslating] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState('ASL');
+  const [translations, setTranslations] = useState<Translation[]>([]);
+  const [currentPrediction, setCurrentPrediction] = useState<string>('');
+  const [bufferStatus, setBufferStatus] = useState<string>('');
+  const [serviceStatus, setServiceStatus] = useState<string>('checking');
+  const [errorMessage, setErrorMessage] = useState<string>('');
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const intervalRef = useRef<number | null>(null);
 
+  // Check service status on mount
+  useEffect(() => {
+    checkServiceStatus();
+  }, []);
+
+  // Initialize webcam
   useEffect(() => {
     if (videoRef.current && isVideoOn) {
-      navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+      setErrorMessage('');
+      
+      navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          facingMode: 'user'
+        }, 
+        audio: false 
+      })
         .then(stream => {
+          streamRef.current = stream;
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
           }
+          setErrorMessage('');
         })
-        .catch(err => console.log('Error accessing camera:', err));
+        .catch(err => {
+          console.error('Error accessing camera:', err);
+          
+          // Provide specific error messages based on error type
+          if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+            setErrorMessage('📷 Camera access denied. Please click the camera icon in your browser\'s address bar and allow camera access, then refresh the page.');
+          } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+            setErrorMessage('📷 No camera found. Please connect a camera and refresh the page.');
+          } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+            setErrorMessage('📷 Camera is already in use by another application. Please close other apps using the camera.');
+          } else {
+            setErrorMessage(`📷 Camera error: ${err.message}. Please check your camera settings.`);
+          }
+          
+          // Automatically turn off video when access fails
+          setIsVideoOn(false);
+        });
+    } else {
+      stopCamera();
     }
 
     return () => {
-      if (videoRef.current && videoRef.current.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach(track => track.stop());
-      }
+      stopCamera();
     };
   }, [isVideoOn]);
 
-  const translations = [
-    { time: '00:15', text: 'Hello', confidence: 95 },
-    { time: '00:18', text: 'How are you?', confidence: 92 },
-    { time: '00:23', text: 'Nice to meet you', confidence: 88 },
-    { time: '00:28', text: 'Thank you', confidence: 94 },
-    { time: '00:32', text: 'Good morning', confidence: 96 },
-  ];
+  // Start/stop real-time translation
+  useEffect(() => {
+    if (isTranslating && isVideoOn) {
+      startRealtimeTranslation();
+    } else {
+      stopRealtimeTranslation();
+    }
+
+    return () => {
+      stopRealtimeTranslation();
+    };
+  }, [isTranslating, isVideoOn]);
+
+  const checkServiceStatus = async () => {
+    try {
+      const status = await translationAPI.getStatus();
+      if (status.colab_inference.status === 'connected') {
+        setServiceStatus('connected');
+        setErrorMessage('');
+      } else {
+        setServiceStatus('disconnected');
+        setErrorMessage(`Service unavailable: ${status.colab_inference.message}`);
+      }
+    } catch (error) {
+      setServiceStatus('error');
+      setErrorMessage('Failed to connect to translation service');
+    }
+  };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+  };
+
+  const captureFrame = (): string | null => {
+    if (!videoRef.current || !canvasRef.current) return null;
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const context = canvas.getContext('2d');
+
+    if (!context || video.readyState !== video.HAVE_ENOUGH_DATA) return null;
+
+    // Set canvas size to match video
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    // Draw current video frame to canvas
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    // Convert to base64
+    return canvas.toDataURL('image/jpeg', 0.8);
+  };
+
+  const startRealtimeTranslation = async () => {
+    // Reset buffer when starting new session
+    try {
+      await translationAPI.resetTranslation();
+      setTranslations([]);
+      setBufferStatus('Initializing...');
+    } catch (error) {
+      console.error('Failed to reset translation:', error);
+    }
+
+    // Capture and send frames every 200ms (5 FPS)
+    intervalRef.current = window.setInterval(async () => {
+      const frameData = captureFrame();
+      if (!frameData) return;
+
+      try {
+        const result = await translationAPI.translateFrame(frameData);
+
+        if (result.status === 'buffering') {
+          setBufferStatus(result.message || 'Buffering frames...');
+          setCurrentPrediction('');
+        } else if (result.predicted_gloss) {
+          setCurrentPrediction(result.predicted_gloss);
+          setBufferStatus('');
+          
+          // Add to translation log if confidence is high enough
+          if (result.confidence > 0.7) {
+            const now = new Date();
+            const timeStr = `${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+            
+            setTranslations(prev => {
+              // Avoid duplicate consecutive translations
+              if (prev.length > 0 && prev[prev.length - 1].text === result.predicted_gloss) {
+                return prev;
+              }
+              
+              const newTranslation = {
+                time: timeStr,
+                text: result.predicted_gloss,
+                confidence: Math.round(result.confidence * 100)
+              };
+              
+              // Keep only last 20 translations
+              return [...prev.slice(-19), newTranslation];
+            });
+          }
+        } else if (result.error) {
+          console.error('Translation error:', result.error);
+        }
+      } catch (error) {
+        console.error('Failed to process frame:', error);
+        // Don't show error for every frame, just log it
+      }
+    }, 200); // 5 FPS
+  };
+
+  const stopRealtimeTranslation = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    setCurrentPrediction('');
+    setBufferStatus('');
+  };
+
+  const toggleTranslation = () => {
+    if (serviceStatus !== 'connected') {
+      setErrorMessage('Translation service is not available. Please check backend configuration.');
+      return;
+    }
+    setIsTranslating(!isTranslating);
+  };
 
   const languages = ['ASL', 'BSL', 'ISL', 'JSL'];
 
@@ -87,17 +256,24 @@ export default function Personal() {
 
               {/* Status Indicators */}
               <div className="absolute top-3 md:top-4 left-3 md:left-4 flex gap-2 flex-wrap z-20">
-                <div className="bg-gradient-to-r from-red-600 to-red-500 dark:from-red-500 dark:to-red-600 text-white px-2.5 md:px-3 py-1 md:py-1.5 rounded-full flex items-center gap-1.5 md:gap-2 shadow-lg text-xs md:text-sm">
+                <div className={`${
+                  serviceStatus === 'connected' 
+                    ? 'bg-gradient-to-r from-green-600 to-green-500 dark:from-green-500 dark:to-green-600' 
+                    : 'bg-gradient-to-r from-yellow-600 to-yellow-500 dark:from-yellow-500 dark:to-yellow-600'
+                } text-white px-2.5 md:px-3 py-1 md:py-1.5 rounded-full flex items-center gap-1.5 md:gap-2 shadow-lg text-xs md:text-sm`}>
                   <div className="w-1.5 h-1.5 md:w-2 md:h-2 bg-white rounded-full animate-pulse" />
-                  <span>Practice Mode</span>
+                  <span>{serviceStatus === 'connected' ? 'Ready' : 'Offline'}</span>
                 </div>
                 {isTranslating && (
                   <div className="bg-gradient-to-r from-blue-600 to-blue-500 dark:from-blue-500 dark:to-blue-600 text-white px-2.5 md:px-3 py-1 md:py-1.5 rounded-full flex items-center gap-1.5 md:gap-2 shadow-lg text-xs md:text-sm">
                     <Languages className="w-3 h-3 md:w-4 md:h-4" />
-                    <span>Active</span>
+                    <span>Translating</span>
                   </div>
                 )}
               </div>
+              
+              {/* Hidden canvas for frame capture */}
+              <canvas ref={canvasRef} style={{ display: 'none' }} />
 
               {/* Top Right Actions */}
               <div className="absolute top-3 md:top-4 right-3 md:right-4 flex gap-2 z-20">
@@ -113,20 +289,63 @@ export default function Personal() {
 
             {/* Translation Overlay */}
             {isTranslating && (
-              <div className="bottom-16 md:bottom-20 left-4 right-4 md:left-6 md:right-6 bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm rounded-xl md:rounded-2xl px-4 md:px-6 lg:px-8 py-3 md:py-4 shadow-lg">
+              <div className="absolute bottom-16 md:bottom-20 left-4 right-4 md:left-6 md:right-6 bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm rounded-xl md:rounded-2xl px-4 md:px-6 lg:px-8 py-3 md:py-4 shadow-lg">
                 <div className="flex items-start gap-2 md:gap-3">
                   <Languages className="w-4 h-4 md:w-5 md:h-5 text-blue-600 dark:text-blue-400 mt-0.5 md:mt-1 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm md:text-base text-gray-900 dark:text-white break-words">
-                      Translating sign language in real-time...
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs md:text-sm text-green-600 dark:text-green-400 flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 bg-green-600 dark:bg-green-400 rounded-full animate-pulse"></span>
-                        Live
-                      </span>
-                      <span className="text-xs md:text-sm text-gray-600 dark:text-gray-400">{selectedLanguage} to English</span>
-                    </div>
+                    {currentPrediction ? (
+                      <>
+                        <p className="text-lg md:text-2xl font-bold text-gray-900 dark:text-white break-words">
+                          {currentPrediction}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-xs md:text-sm text-green-600 dark:text-green-400 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 bg-green-600 dark:bg-green-400 rounded-full animate-pulse"></span>
+                            Live
+                          </span>
+                          <span className="text-xs md:text-sm text-gray-600 dark:text-gray-400">{selectedLanguage} to English</span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm md:text-base text-gray-900 dark:text-white break-words">
+                          {bufferStatus || 'Waiting for signs...'}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-xs md:text-sm text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 bg-blue-600 dark:bg-blue-400 rounded-full animate-pulse"></span>
+                            Processing
+                          </span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* Error Message */}
+            {errorMessage && (
+              <div className="absolute bottom-16 md:bottom-20 left-4 right-4 md:left-6 md:right-6 bg-red-50 dark:bg-red-900/20 border-2 border-red-300 dark:border-red-700 rounded-xl px-4 py-4 shadow-xl">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-red-900 dark:text-red-100 mb-2">{errorMessage}</p>
+                    {errorMessage.includes('denied') && (
+                      <div className="text-xs text-red-800 dark:text-red-200 space-y-1 bg-red-100 dark:bg-red-900/30 p-2 rounded">
+                        <p className="font-semibold">How to fix:</p>
+                        <ol className="list-decimal list-inside space-y-1 ml-2">
+                          <li>Look for the camera icon (🔒🎥) in your browser's address bar</li>
+                          <li>Click it and select \"Allow\" for camera access</li>
+                          <li>Refresh this page (F5 or Ctrl+R)</li>
+                        </ol>
+                      </div>
+                    )}
+                    {!errorMessage.includes('denied') && errorMessage.includes('in use') && (
+                      <div className="text-xs text-red-800 dark:text-red-200 bg-red-100 dark:bg-red-900/30 p-2 rounded">
+                        <p>Close any other apps or browser tabs using your camera, then click the video button to retry.</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -171,7 +390,9 @@ export default function Personal() {
                       ? 'bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white ring-2 ring-blue-600 dark:ring-blue-400 ring-offset-2 ring-offset-gray-50 dark:ring-offset-gray-950'
                       : 'bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white'
                     }`}
-                  onClick={() => setIsTranslating(!isTranslating)}
+                  onClick={toggleTranslation}
+                  disabled={serviceStatus !== 'connected' || !isVideoOn}
+                  title={serviceStatus !== 'connected' ? 'Translation service unavailable' : 'Start/Stop translation'}
                 >
                   <Languages className="w-5 h-5" />
                 </Button>

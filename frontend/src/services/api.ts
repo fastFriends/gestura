@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE_URL = (import.meta as any).env?.VITE_API_URL;
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -79,6 +79,26 @@ export const translationAPI = {
 
   getStatus: async () => {
     const response = await api.get('/api/translate/status');
+    return response.data;
+  },
+
+  // Real-time frame processing
+  translateFrame: async (frameData: string) => {
+    const response = await api.post('/api/translate/frame', {
+      frame: frameData,
+    });
+    return response.data;
+  },
+
+  // Reset translation buffer
+  resetTranslation: async () => {
+    const response = await api.post('/api/translate/reset');
+    return response.data;
+  },
+
+  // Get supported labels
+  getSupportedLabels: async () => {
+    const response = await api.get('/api/translate/labels');
     return response.data;
   },
 };
