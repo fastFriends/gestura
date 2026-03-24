@@ -215,7 +215,9 @@ export default function Login() {
               {!isLoading && <ArrowRight className="w-5 h-5" />}
             </Button>
 
-            {/* Divider */}
+            {/* 
+            // Divider 
+
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-gray-300 dark:border-gray-700"></div>
@@ -227,7 +229,8 @@ export default function Login() {
               </div>
             </div>
 
-            {/* Social Login */}
+            // Social Login 
+            
             <div className="grid grid-cols-2 gap-3">
               <Button
                 type="button"
@@ -264,7 +267,7 @@ export default function Login() {
                 </svg>
                 GitHub
               </Button>
-            </div>
+            </div> */}
           </form>
         </Card>
       </div>

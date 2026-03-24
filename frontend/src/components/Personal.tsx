@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from 'react';
-import { useTheme } from '../contexts/ThemeContext';
 import {
   Video,
   VideoOff,
@@ -22,18 +21,36 @@ import { Card } from './ui/card';
 import { translationAPI } from '../services/api';
 
 interface Translation {
+  id?: string;
   time: string;
-  text: string;
-  confidence: number;
+  predictedWord: string;
+  sentence: string;
+  confidence?: number | null;
+}
+
+interface TopWord {
+  label: string;
+  value: number;
 }
 
 export default function Personal() {
+  const PREDICTION_WINDOW_SIZE = 8;
+  const RESUME_DELAY_MS = 1800;
+
   const [isVideoOn, setIsVideoOn] = useState(true);
   const [isAudioOn, setIsAudioOn] = useState(true);
   const [isTranslating, setIsTranslating] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState('ASL');
   const [translations, setTranslations] = useState<Translation[]>([]);
+  const [topWords, setTopWords] = useState<TopWord[]>([]);
   const [currentPrediction, setCurrentPrediction] = useState<string>('');
+  const [currentSentence, setCurrentSentence] = useState<string>('');
+  const [isGeneratingSentence, setIsGeneratingSentence] = useState(false);
+  const [isCapturePaused, setIsCapturePaused] = useState(false);
+  const [windowProgress, setWindowProgress] = useState<{ current: number; total: number }>({
+    current: 0,
+    total: PREDICTION_WINDOW_SIZE,
+  });
   const [bufferStatus, setBufferStatus] = useState<string>('');
   const [serviceStatus, setServiceStatus] = useState<string>('checking');
   const [errorMessage, setErrorMessage] = useState<string>('');
@@ -41,10 +58,18 @@ export default function Personal() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const intervalRef = useRef<number | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const capturePausedRef = useRef(false);
+  const generationInFlightRef = useRef(false);
+  const modelBufferingRef = useRef(false);
+  const resumeTimeoutRef = useRef<number | null>(null);
+  const windowLabelsRef = useRef<string[]>([]);
+  const windowTop5Ref = useRef<any[][]>([]);
 
   // Check service status on mount
   useEffect(() => {
     checkServiceStatus();
+    loadHistory();
   }, []);
 
   // Initialize webcam
@@ -109,16 +134,169 @@ export default function Personal() {
   const checkServiceStatus = async () => {
     try {
       const status = await translationAPI.getStatus();
-      if (status.colab_inference.status === 'connected') {
+      if (status.model_service?.status === 'connected') {
         setServiceStatus('connected');
         setErrorMessage('');
       } else {
         setServiceStatus('disconnected');
-        setErrorMessage(`Service unavailable: ${status.colab_inference.message}`);
+        setErrorMessage(`Service unavailable: ${status.model_service?.message || 'Model service is offline'}`);
       }
     } catch (error) {
       setServiceStatus('error');
       setErrorMessage('Failed to connect to translation service');
+    }
+  };
+
+  const formatTime = (isoDate?: string) => {
+    if (!isoDate) return '--:--';
+    const date = new Date(isoDate);
+    if (Number.isNaN(date.getTime())) return '--:--';
+    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')}`;
+  };
+
+  const loadHistory = async () => {
+    try {
+      const history = await translationAPI.getTranslationHistory(30);
+
+      const historyItems = (history.items || []).map((item: any) => ({
+        id: item.id,
+        time: formatTime(item.created_at),
+        predictedWord: item.predicted_word || '',
+        sentence: item.sentence || '',
+        confidence: item.confidence ?? null,
+      }));
+
+      setTranslations(historyItems);
+
+      const topWordsResponse = (history.top_words || []).map((item: any) => ({
+        label: item.label,
+        value: item.count,
+      }));
+      setTopWords(topWordsResponse);
+    } catch (error) {
+      console.error('Failed to load translation history:', error);
+    }
+  };
+
+  const updateTopWordsFromPrediction = (incomingTop5: any) => {
+    if (!Array.isArray(incomingTop5)) return;
+    const formatted = incomingTop5.map(([label, prob]: [string, number]) => ({ label, prob }));
+    const normalized = formatted
+      .map((item: any) => ({
+        label: item.label,
+        value: Math.round((Number(item.prob) || 0) * 100),
+      }))
+      .filter((item: TopWord) => Boolean(item.label))
+      .slice(0, 5);
+    console.log('Updating top words from prediction:', normalized);
+    if (normalized.length > 0) {
+      setTopWords(normalized);
+    }
+  };
+
+  const resetPredictionWindow = () => {
+    windowLabelsRef.current = [];
+    windowTop5Ref.current = [];
+    setWindowProgress({ current: 0, total: PREDICTION_WINDOW_SIZE });
+  };
+
+  const setCapturePausedState = (paused: boolean) => {
+    capturePausedRef.current = paused;
+    setIsCapturePaused(paused);
+  };
+
+  const scheduleCaptureResume = () => {
+    if (resumeTimeoutRef.current) {
+      clearTimeout(resumeTimeoutRef.current);
+      resumeTimeoutRef.current = null;
+    }
+
+    resumeTimeoutRef.current = window.setTimeout(() => {
+      if (!isTranslating) return;
+      resetPredictionWindow();
+      setCapturePausedState(false);
+      setBufferStatus('Listening for next word window...');
+    }, RESUME_DELAY_MS);
+  };
+
+  const requestSentenceGeneration = async (labels?: string[], top5?: any[][]) => {
+    if (!isTranslating) return;
+    if (generationInFlightRef.current) return;
+
+    generationInFlightRef.current = true;
+    modelBufferingRef.current = true;
+    setIsGeneratingSentence(true);
+    setCurrentPrediction('');
+    setBufferStatus('Generating sentence...');
+
+    try {
+      const generated = await translationAPI.generateSentence(
+        labels && labels.length > 0
+          ? {
+              labels,
+              top5: top5 && top5.length > 0 ? top5 : undefined,
+            }
+          : undefined
+      );
+      const sentence = generated?.sentence || '';
+      const predictedWord = generated?.predicted_word || currentPrediction;
+
+      if (sentence) {
+        setCurrentSentence(sentence);
+      }
+
+      const historyEntry = generated?.history_entry;
+      if (historyEntry?.sentence) {
+        const mappedEntry: Translation = {
+          id: historyEntry.id,
+          time: formatTime(historyEntry.created_at),
+          predictedWord: historyEntry.predicted_word || predictedWord || '',
+          sentence: historyEntry.sentence,
+          confidence: historyEntry.confidence ?? null,
+        };
+
+        setTranslations(prev => {
+          if (prev.length > 0 && prev[0].sentence === mappedEntry.sentence && prev[0].predictedWord === mappedEntry.predictedWord) {
+            return prev;
+          }
+          return [mappedEntry, ...prev].slice(0, 50);
+        });
+
+        if (Array.isArray(historyEntry.top_words) && historyEntry.top_words.length > 0) {
+          setTopWords(
+            historyEntry.top_words
+              .map((item: any) => ({
+                label: item.label,
+                value: Math.round((Number(item.prob) || 0) * 100),
+              }))
+              .slice(0, 5)
+          );
+        }
+      }
+    } catch (error) {
+      console.error('Sentence generation failed:', error);
+      setBufferStatus('Generation failed. Resuming capture...');
+    } finally {
+      generationInFlightRef.current = false;
+      setIsGeneratingSentence(false);
+      scheduleCaptureResume();
+    }
+  };
+
+  const appendPredictionToWindow = (word: string, top5: any[] = []) => {
+    if (capturePausedRef.current || generationInFlightRef.current) return;
+
+    const nextLabels = [...windowLabelsRef.current, word].slice(-PREDICTION_WINDOW_SIZE);
+    const nextTop5 = [...windowTop5Ref.current, top5].slice(-PREDICTION_WINDOW_SIZE);
+
+    windowLabelsRef.current = nextLabels;
+    windowTop5Ref.current = nextTop5;
+    setWindowProgress({ current: nextLabels.length, total: PREDICTION_WINDOW_SIZE });
+
+    if (nextLabels.length >= PREDICTION_WINDOW_SIZE) {
+      setCapturePausedState(true);
+      setBufferStatus('Window filled. Generating sentence...');
+      requestSentenceGeneration(nextLabels, nextTop5);
     }
   };
 
@@ -154,55 +332,87 @@ export default function Personal() {
     try {
       await translationAPI.resetTranslation();
       setTranslations([]);
+      setTopWords([]);
+      setCurrentSentence('');
       setBufferStatus('Initializing...');
+      resetPredictionWindow();
+      setCapturePausedState(false);
+      modelBufferingRef.current = false;
     } catch (error) {
       console.error('Failed to reset translation:', error);
     }
 
-    // Capture and send frames every 200ms (5 FPS)
-    intervalRef.current = window.setInterval(async () => {
-      const frameData = captureFrame();
-      if (!frameData) return;
+    const ws = translationAPI.openPredictWebSocket();
+    wsRef.current = ws;
 
+    ws.onopen = () => {
+      setBufferStatus('Streaming frames...');
+
+      intervalRef.current = window.setInterval(() => {
+        if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+        if (capturePausedRef.current || generationInFlightRef.current) return;
+
+        const frameData = captureFrame();
+        if (!frameData) return;
+
+        try {
+          wsRef.current.send(JSON.stringify({ image: frameData }));
+        } catch (error) {
+          console.error('Failed to send frame:', error);
+        }
+      }, 200); // 5 FPS
+    };
+
+    ws.onmessage = (event) => {
       try {
-        const result = await translationAPI.translateFrame(frameData);
+        const parsed = JSON.parse(event.data);
+        const result = parsed?.type === 'inference' && parsed?.result
+          ? {
+              ...parsed.result,
+              predicted_gloss: parsed.result.word,
+            }
+          : parsed;
+        
+        console.log('WebSocket message received:', result);
 
         if (result.status === 'buffering') {
+          modelBufferingRef.current = true;
           setBufferStatus(result.message || 'Buffering frames...');
           setCurrentPrediction('');
-        } else if (result.predicted_gloss) {
-          setCurrentPrediction(result.predicted_gloss);
-          setBufferStatus('');
-          
-          // Add to translation log if confidence is high enough
-          if (result.confidence > 0.7) {
-            const now = new Date();
-            const timeStr = `${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-            
-            setTranslations(prev => {
-              // Avoid duplicate consecutive translations
-              if (prev.length > 0 && prev[prev.length - 1].text === result.predicted_gloss) {
-                return prev;
-              }
-              
-              const newTranslation = {
-                time: timeStr,
-                text: result.predicted_gloss,
-                confidence: Math.round(result.confidence * 100)
-              };
-              
-              // Keep only last 20 translations
-              return [...prev.slice(-19), newTranslation];
-            });
+          return;
+        }
+
+        if (result.predicted_gloss) {
+          modelBufferingRef.current = false;
+          if (capturePausedRef.current || generationInFlightRef.current) {
+            return;
           }
-        } else if (result.error) {
+          setCurrentPrediction(result.predicted_gloss);
+          setBufferStatus(`Collecting words: ${windowLabelsRef.current.length}/${PREDICTION_WINDOW_SIZE}`);
+          updateTopWordsFromPrediction(result.top5 || []);
+          appendPredictionToWindow(result.predicted_gloss, result.top5 || []);
+          return;
+        }
+
+        if (result.error) {
           console.error('Translation error:', result.error);
         }
       } catch (error) {
-        console.error('Failed to process frame:', error);
-        // Don't show error for every frame, just log it
+        console.error('Failed to parse websocket message:', error);
       }
-    }, 200); // 5 FPS
+    };
+
+    ws.onerror = (error) => {
+      console.error('Predict websocket error:', error);
+      setBufferStatus('WebSocket error');
+    };
+
+    ws.onclose = () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
   };
 
   const stopRealtimeTranslation = () => {
@@ -210,8 +420,21 @@ export default function Personal() {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+    if (resumeTimeoutRef.current) {
+      clearTimeout(resumeTimeoutRef.current);
+      resumeTimeoutRef.current = null;
+    }
+    generationInFlightRef.current = false;
+    setCapturePausedState(false);
+    modelBufferingRef.current = false;
+    resetPredictionWindow();
     setCurrentPrediction('');
     setBufferStatus('');
+    setIsGeneratingSentence(false);
   };
 
   const toggleTranslation = () => {
@@ -221,8 +444,6 @@ export default function Personal() {
     }
     setIsTranslating(!isTranslating);
   };
-
-  const languages = ['ASL', 'BSL', 'ISL', 'JSL'];
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 transition-colors">
@@ -240,7 +461,7 @@ export default function Personal() {
                     autoPlay
                     playsInline
                     muted
-                    className="block w-full h-full object-cover"
+                    className={`block w-full h-full object-cover transition-all duration-300 ${isGeneratingSentence || isCapturePaused ? 'blur-sm scale-105' : ''}`}
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center bg-gray-800 dark:bg-gray-900">
@@ -249,6 +470,16 @@ export default function Personal() {
                         <VideoOff className="w-8 h-8 md:w-10 md:h-10 lg:w-12 lg:h-12 text-gray-400 dark:text-gray-500" />
                       </div>
                       <p className="text-sm md:text-base text-gray-400 dark:text-gray-500">Camera is off</p>
+                    </div>
+                  </div>
+                )}
+
+                {(isGeneratingSentence || isCapturePaused) && isTranslating && isVideoOn && (
+                  <div className="absolute inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-10">
+                    <div className="text-center text-white px-4">
+                      <div className="w-10 h-10 border-2 border-white/60 border-t-white rounded-full animate-spin mx-auto mb-3" />
+                      <p className="text-sm md:text-base font-medium">Generating sentence...</p>
+                      <p className="text-xs md:text-sm text-white/80 mt-1">Resuming prediction shortly</p>
                     </div>
                   </div>
                 )}
@@ -296,12 +527,18 @@ export default function Personal() {
                     {currentPrediction ? (
                       <>
                         <p className="text-lg md:text-2xl font-bold text-gray-900 dark:text-white break-words">
-                          {currentPrediction}
+                          [{currentPrediction}]
+                        </p>
+                        <p className={`mt-1 text-sm md:text-lg text-gray-700 dark:text-gray-200 break-words transition-all duration-300 ${isGeneratingSentence ? 'animate-pulse opacity-70' : 'opacity-100'}`}>
+                          {currentSentence ? `"${currentSentence}"` : (isGeneratingSentence ? 'Generating sentence...' : 'Waiting for sentence...')}
                         </p>
                         <div className="flex items-center gap-2 mt-1">
                           <span className="text-xs md:text-sm text-green-600 dark:text-green-400 flex items-center gap-1">
                             <span className="w-1.5 h-1.5 bg-green-600 dark:bg-green-400 rounded-full animate-pulse"></span>
                             Live
+                          </span>
+                          <span className="text-xs md:text-sm text-gray-600 dark:text-gray-400">
+                            Window {windowProgress.current}/{windowProgress.total}
                           </span>
                           <span className="text-xs md:text-sm text-gray-600 dark:text-gray-400">{selectedLanguage} to English</span>
                         </div>
@@ -442,8 +679,8 @@ export default function Personal() {
                     <Languages className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                   </div>
                   <div>
-                    <h3 className="text-gray-900 dark:text-white text-sm md:text-base">Translation Log</h3>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">{translations.length} translations</p>
+                    <h3 className="text-gray-900 dark:text-white text-sm md:text-base">Translation Output</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{translations.length} sentence logs</p>
                   </div>
                 </div>
                 <div className="flex gap-1">
@@ -456,22 +693,34 @@ export default function Personal() {
                 </div>
               </div>
 
-              <div className="space-y-2 flex-1 overflow-y-auto pr-1">
+              <div className="space-y-3 flex-1 overflow-y-auto pr-1">
+                <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Top Words</p>
+                  <div className="space-y-2">
+                    {topWords.length === 0 && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400">No predictions yet</p>
+                    )}
+                    {topWords.map((word, index) => (
+                      <div key={`${word.label}-${index}`} className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-900 dark:text-white">{word.label}</span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">{word.value}%</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                          <div className="h-full bg-blue-500 dark:bg-blue-400 rounded-full transition-all duration-300" style={{ width: `${Math.max(0, Math.min(100, word.value))}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 {translations.map((translation, index) => (
-                  <div key={index} className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors">
+                  <div key={translation.id || index} className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors">
                     <div className="flex items-center justify-between mb-1.5">
                       <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">{translation.time}</span>
-                      <div className="flex items-center gap-1.5">
-                        <div className="h-1.5 w-16 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-green-500 dark:bg-green-400 rounded-full"
-                            style={{ width: `${translation.confidence}%` }}
-                          />
-                        </div>
-                        <span className="text-xs text-green-600 dark:text-green-400 font-semibold">{translation.confidence}%</span>
-                      </div>
+                      <span className="text-xs text-blue-600 dark:text-blue-400 font-semibold">[{translation.predictedWord}]</span>
                     </div>
-                    <p className="text-sm text-gray-900 dark:text-white">{translation.text}</p>
+                    <p className="text-sm text-gray-900 dark:text-white">"{translation.sentence}"</p>
                   </div>
                 ))}
               </div>

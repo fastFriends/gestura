@@ -34,7 +34,7 @@ export default function App() {
             <Route element={<Layout />}>
               <Route path="/home" element={<ProtectedRoute><Home /></ProtectedRoute>} />
               <Route path="/personal" element={<ProtectedRoute><Personal /></ProtectedRoute>} />
-              <Route path="/translator" element={<ProtectedRoute><Translator /></ProtectedRoute>} />
+              {/* <Route path="/translator" element={<ProtectedRoute><Translator /></ProtectedRoute>} /> Temporarily disable Translator route */}
               <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
             </Route>
           </Routes>

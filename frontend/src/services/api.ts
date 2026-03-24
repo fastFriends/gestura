@@ -10,6 +10,23 @@ const api = axios.create({
   withCredentials: true, // Important for cookies
 });
 
+const getWebSocketBaseUrl = () => {
+  if (API_BASE_URL) {
+    if (API_BASE_URL.startsWith('https://')) {
+      return `wss://${API_BASE_URL.slice('https://'.length)}`;
+    }
+    if (API_BASE_URL.startsWith('http://')) {
+      return `ws://${API_BASE_URL.slice('http://'.length)}`;
+    }
+    if (API_BASE_URL.startsWith('ws://') || API_BASE_URL.startsWith('wss://')) {
+      return API_BASE_URL;
+    }
+  }
+
+  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  return `${protocol}://${window.location.host}`;
+};
+
 // Request interceptor to add token to requests
 api.interceptors.request.use(
   (config) => {
@@ -82,12 +99,11 @@ export const translationAPI = {
     return response.data;
   },
 
-  // Real-time frame processing
-  translateFrame: async (frameData: string) => {
-    const response = await api.post('/api/translate/frame', {
-      frame: frameData,
-    });
-    return response.data;
+  openPredictWebSocket: () => {
+    const token = localStorage.getItem('access_token');
+    const wsBaseUrl = getWebSocketBaseUrl().replace(/\/$/, '');
+    const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : '';
+    return new WebSocket(`${wsBaseUrl}/api/translate/predict${tokenQuery}`);
   },
 
   // Reset translation buffer
@@ -99,6 +115,18 @@ export const translationAPI = {
   // Get supported labels
   getSupportedLabels: async () => {
     const response = await api.get('/api/translate/labels');
+    return response.data;
+  },
+
+  generateSentence: async (data?: { labels?: string[]; top5?: any[] }) => {
+    const response = await api.post('/api/translate/generate', data || {});
+    return response.data;
+  },
+
+  getTranslationHistory: async (limit = 50) => {
+    const response = await api.get('/api/translate/history', {
+      params: { limit },
+    });
     return response.data;
   },
 };
