@@ -1,22 +1,22 @@
-# Requirements for ASL model inference notebook
-# NOTE: For PyTorch install prefer conda (see instructions below).
+fastapi
+uvicorn
 mediapipe==0.10.9
 opencv-python
 numpy
 pandas
 matplotlib
-torch
-torchvision
-torchaudio
 flask
 flask-cors
-pyngrok
+# pyngrok
 ipython
 ipykernel
+python-multipart
 
 # Optional / dev
 pytest
 
-# Important: Installing 'torch' with CUDA support is platform-specific.
-# Use conda for CUDA builds. Example (Windows, CUDA 12.1):
-#   conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia
+# PyTorch GPU (CUDA 11.8) install:
+# Run this command after activating your environment:
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+# Do NOT add torch, torchvision, or torchaudio below—install them with the above command for GPU support.
+
