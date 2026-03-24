@@ -1,8 +1,11 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.routers import auth, translator
-from app.database import connect_to_mongo, close_mongo_connection, get_users_collection
+from app.database import connect_to_mongo, close_mongo_connection, get_users_collection, get_translation_history_collection
 from contextlib import asynccontextmanager
 
 
@@ -14,8 +17,10 @@ async def lifespan(app: FastAPI):
     
     # Create indexes
     users_collection = get_users_collection()
+    translation_history_collection = get_translation_history_collection()
     await users_collection.create_index("email", unique=True)
     await users_collection.create_index("username", unique=True)
+    await translation_history_collection.create_index([("user_id", 1), ("created_at", -1)])
     print("MongoDB indexes created")
     
     yield
@@ -45,6 +50,10 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(translator.router, prefix="/api", tags=["Translator"])
 
+
+# serve a tiny static client for testing
+static_dir = Path(__file__).resolve().parent / "static"
+app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 @app.get("/")
 async def root():

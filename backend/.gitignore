@@ -42,3 +42,8 @@ wheels/
 # OS
 .DS_Store
 Thumbs.db
+
+# Testing
+app/static/
+backend_debug.py
+test/

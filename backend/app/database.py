@@ -30,3 +30,9 @@ def get_users_collection():
     """Get users collection"""
     db = get_database()
     return db.users
+
+
+def get_translation_history_collection():
+    """Get translation history collection"""
+    db = get_database()
+    return db.translation_history
