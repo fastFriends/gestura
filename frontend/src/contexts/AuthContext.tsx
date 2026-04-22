@@ -1,14 +1,10 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { authAPI } from '../services/api';
-import { toast } from 'sonner';
+import { createContext, useContext, useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
+import { AxiosError } from 'axios';
 
-interface User {
-  id: number;
-  email: string;
-  username: string;
-  is_active: boolean;
-  created_at: string;
-}
+import { authAPI } from '../services/api';
+import type { User } from '../services/api';
+import { toast } from 'sonner';
 
 interface AuthContextType {
   user: User | null;
@@ -21,11 +17,23 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof AxiosError) {
+    if (typeof error.response?.data?.detail === 'string') {
+      return error.response.data.detail;
+    }
+    if (error.message === 'Network Error' || error.code === 'ERR_NETWORK') {
+      return 'Cannot connect to server. Please make sure the backend is running.';
+    }
+  }
+
+  return fallback;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Check if user is logged in on mount
   useEffect(() => {
     const checkAuth = async () => {
       const token = localStorage.getItem('access_token');
@@ -34,7 +42,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const userData = await authAPI.getCurrentUser();
           setUser(userData);
         } catch (error) {
-          console.error('Failed to get user:', error);
           localStorage.removeItem('access_token');
           localStorage.removeItem('user');
         }
@@ -47,32 +54,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     try {
-      const response = await authAPI.login({ email, password });
-      
-      // Fetch user data after login
+      await authAPI.login({ email, password });
       const userData = await authAPI.getCurrentUser();
       setUser(userData);
       localStorage.setItem('user', JSON.stringify(userData));
-      
+
       toast.success('Login successful!');
-    } catch (error: any) {
-      console.error('Login error details:', {
-        message: error.message,
-        response: error.response,
-        status: error.response?.status,
-        data: error.response?.data,
-      });
-      
-      let errorMessage = 'Login failed. Please check your credentials.';
-      
-      if (error.response?.data?.detail) {
-        errorMessage = error.response.data.detail;
-      } else if (error.message === 'Network Error') {
-        errorMessage = 'Cannot connect to server. Please make sure the backend is running.';
-      } else if (error.code === 'ERR_NETWORK') {
-        errorMessage = 'Network error. Check if backend is running on http://localhost:8000';
-      }
-      
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(
+        error,
+        'Login failed. Please check your credentials.',
+      );
       toast.error(errorMessage);
       throw error;
     }
@@ -80,14 +72,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signup = async (email: string, username: string, password: string) => {
     try {
-      const userData = await authAPI.signup({ email, username, password });
-      
-      // Auto-login after signup
+      await authAPI.signup({ email, username, password });
       await login(email, password);
-      
+
       toast.success('Account created successfully!');
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail || 'Signup failed. Please try again.';
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error, 'Signup failed. Please try again.');
       toast.error(errorMessage);
       throw error;
     }
@@ -99,21 +89,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
       toast.success('Logged out successfully');
     } catch (error) {
-      console.error('Logout error:', error);
-      // Clear local state even if API call fails
       setUser(null);
       localStorage.removeItem('access_token');
       localStorage.removeItem('user');
     }
   };
 
-  const value = {
+  const value: AuthContextType = {
     user,
     loading,
     login,
     signup,
     logout,
-    isAuthenticated: !!user,
+    isAuthenticated: Boolean(user),
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -1,11 +1,15 @@
-import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Wrench } from 'lucide-react';
+import { toast } from 'sonner';
 
-const Underworks: React.FC = () => {
+export default function Underworks() {
   const navigate = useNavigate();
+
+  const handleNotifyMe = () => {
+    toast.success("Thanks. We'll notify you when this page is ready.");
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 transition-colors">
@@ -30,7 +34,7 @@ const Underworks: React.FC = () => {
                   <Button variant="outline" onClick={() => navigate('/home')} className="hover:text-gray-700 hover:dark:text-gray-400" >Go Home</Button>
                   <Button
                     variant="default"
-                    onClick={() => alert("Thanks — we'll notify you when this page is ready.")}
+                    onClick={handleNotifyMe}
                     className="hover:text-gray-700 hover:dark:text-gray-400"
                   >
                     Notify Me
@@ -45,6 +49,4 @@ const Underworks: React.FC = () => {
       </main>
     </div>
   );
-};
-
-export default Underworks;
+}

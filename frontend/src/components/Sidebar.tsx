@@ -1,17 +1,25 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, User, Languages, Settings, MessageSquare, LogOut } from 'lucide-react';
+import { Home, Languages, LogOut, MessageSquare, Settings, User } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+
 import { useAuth } from '../contexts/AuthContext';
+
+interface NavigationItem {
+  path: string;
+  icon: LucideIcon;
+  label: string;
+}
+
+const NAV_ITEMS: NavigationItem[] = [
+  { path: '/home', icon: Home, label: 'Home' },
+  { path: '/personal', icon: User, label: 'Personal' },
+  { path: '/translator', icon: MessageSquare, label: 'Translator' },
+];
 
 export default function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { logout } = useAuth();
-
-  const navItems = [
-    { path: '/home', icon: Home, label: 'Home' },
-    { path: '/personal', icon: User, label: 'Personal' },
-    { path: '/translator', icon: MessageSquare, label: 'Translator' },
-  ];
 
   const handleLogout = async () => {
     await logout();
@@ -38,7 +46,7 @@ export default function Sidebar() {
 
         {/* Navigation */}
         <nav className="flex-1 space-y-1">
-          {navItems.map((item) => {
+          {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
 

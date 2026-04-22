@@ -12,8 +12,8 @@ import Sidebar from './components/Sidebar';
 import Underworks from './components/Underworks';
 import ProtectedRoute from './components/ProtectedRoute';
 
-export default function App() {
-  const Layout = () => (
+function AppLayout() {
+  return (
     <div className="flex">
       <Sidebar />
       <main className="flex-1 min-h-screen">
@@ -21,7 +21,9 @@ export default function App() {
       </main>
     </div>
   );
+}
 
+export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
@@ -31,7 +33,7 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
             <Route path="/underworks" element={<Underworks />} />
-            <Route element={<Layout />}>
+            <Route element={<AppLayout />}>
               <Route path="/home" element={<ProtectedRoute><Home /></ProtectedRoute>} />
               <Route path="/personal" element={<ProtectedRoute><Personal /></ProtectedRoute>} />
               <Route path="/translator" element={<ProtectedRoute><Translator /></ProtectedRoute>} />
